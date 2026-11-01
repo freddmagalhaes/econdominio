@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { RE_TOKEN, hashToken } from "@/lib/convite";
 import { erroContaJaExiste, validarSenha } from "@/lib/senha";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { criarContaAutorizada } from "@/lib/supabase/criar-conta";
 import { createClient } from "@/lib/supabase/server";
 
 export type EstadoCadastro = { erro?: string; jaTemConta?: boolean };
@@ -12,8 +13,8 @@ const INVALIDO = "Convite inválido, expirado ou já utilizado. Peça um novo co
 
 /**
  * Convite de administradora: o link (só enviado ao e-mail convidado) cria a conta e confirma o e-mail.
- * O e-mail é lido do convite no servidor. A conta nasce com origem "gestora", único jeito de o banco aceitar
- * uma conta nova além do convite de morador.
+ * O e-mail é lido do convite no servidor. O banco só aceita a conta se houver uma autorização de uso único
+ * (origem "gestora") registrada pelo servidor.
  */
 export async function criarContaGestora(_: EstadoCadastro, formData: FormData): Promise<EstadoCadastro> {
   const token = String(formData.get("token") ?? "");
@@ -29,24 +30,19 @@ export async function criarContaGestora(_: EstadoCadastro, formData: FormData): 
   const email = (convite as { email?: string } | null)?.email;
   if (!email) return { erro: INVALIDO };
 
-  const { data: criado, error: erroCriar } = await admin.auth.admin.createUser({
-    email,
-    password: senha,
-    email_confirm: true,
-    app_metadata: { origem: "gestora" },
-  });
-  if (erroCriar || !criado.user) {
-    return erroCriar && erroContaJaExiste(erroCriar.message)
+  const criada = await criarContaAutorizada(admin, { email, senha, origem: "gestora" });
+  if ("erro" in criada) {
+    return erroContaJaExiste(criada.erro)
       ? { erro: "Já existe uma conta com o e-mail deste convite. Entre para aceitar.", jaTemConta: true }
       : { erro: "Não foi possível criar a conta. Tente novamente." };
   }
 
   const { error: erroConcluir } = await admin.rpc("concluir_cadastro_gestora", {
     p_token_hash: hash,
-    p_usuario: criado.user.id,
+    p_usuario: criada.user.id,
   });
   if (erroConcluir) {
-    await admin.auth.admin.deleteUser(criado.user.id); // não deixa conta órfã sem a permissão
+    await admin.auth.admin.deleteUser(criada.user.id); // não deixa conta órfã sem a permissão
     return { erro: INVALIDO };
   }
 

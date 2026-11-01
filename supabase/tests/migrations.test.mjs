@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 // Testa as migrations em um Postgres em memória (PGlite) com um stub do schema auth do Supabase.
 import { fileURLToPath } from "node:url";
 const M = fileURLToPath(new URL("../migrations/", import.meta.url));
@@ -8,7 +9,7 @@ const U1 = "11111111-1111-1111-1111-111111111111", U2 = "22222222-2222-2222-2222
 const U3 = "33333333-3333-3333-3333-333333333333", U4 = "44444444-4444-4444-4444-444444444444";
 await pg.exec(`
  create schema auth;
- create table auth.users(id uuid primary key, email text, raw_app_meta_data jsonb not null default '{}'::jsonb);
+ create table auth.users(id uuid primary key, email text, raw_app_meta_data jsonb not null default '{}'::jsonb, raw_user_meta_data jsonb not null default '{}'::jsonb);
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
  create role authenticated nologin; create role anon nologin; create role service_role nologin;
  grant usage on schema auth to authenticated;
@@ -436,10 +437,40 @@ await erra(()=>pg.query("select gerar_cotas($1,'2027-11-01','2027-11-10',null)",
 // ---------------------------------------------------------------- cadastro somente por convite (0015)
 await pg.exec("reset role");
 const NG = "66666666-6666-6666-6666-666666666666", UA = "77777777-7777-7777-7777-777777777777", UN = "88888888-8888-8888-8888-888888888888";
-await erra(()=>pg.query("insert into auth.users(id,email) values ($1,'invasor@x.com')",[UN]), "cadastro público (sem origem) é recusado pelo banco");
-await erra(()=>pg.query(`insert into auth.users(id,email,raw_app_meta_data) values ($1,'invasor@x.com','{"origem":"qualquer"}')`,[UN]), "origem desconhecida também é recusada");
-await pg.query(`insert into auth.users(id,email,raw_app_meta_data) values ($1,'nova@adm.com','{"origem":"gestora"}'), ($2,'plataforma@x.com','{"origem":"plataforma"}')`,[NG,UA]);
-ok((await pg.query("select count(*)::int n from auth.users where id in ($1,$2)",[NG,UA])).rows[0].n===2, "contas criadas pelo servidor (origem válida) são aceitas");
+const hashN = (n) => createHash("sha256").update(n).digest("hex");
+// Como o servidor do app: registra a autorização (service_role) e só então cria o usuário levando o código secreto.
+const autorizar = async (email, origem, nonce) => {
+  await pg.exec("reset role; set role service_role");
+  await pg.query("select autorizar_cadastro($1,$2,$3)", [email, origem, hashN(nonce)]);
+  await pg.exec("reset role");
+};
+const inserir = (id, email, nonce, extra = "{}") =>
+  pg.query("insert into auth.users(id,email,raw_user_meta_data,raw_app_meta_data) values ($1,$2,$3::jsonb,$4::jsonb)", [id, email, JSON.stringify(nonce ? { autorizacao: nonce } : {}), extra]);
+
+await erra(()=>inserir(UN,"invasor@x.com",null), "cadastro público (sem código de autorização) é recusado pelo banco");
+await erra(()=>inserir(UN,"invasor@x.com",null,'{"origem":"gestora"}'), "escrever a origem no app_metadata não adianta");
+await erra(()=>inserir(UN,"invasor@x.com","chute"), "código de autorização inventado é recusado");
+await autorizar("nova@adm.com","gestora","nonce-ng");
+await erra(()=>inserir(UN,"outro@x.com","nonce-ng"), "o código só vale para o e-mail autorizado");
+await erra(()=>inserir(UN,"nova@adm.com","nonce-errado"), "e-mail autorizado com código errado é recusado");
+await inserir(NG,"nova@adm.com","nonce-ng");
+const criada = (await pg.query("select raw_app_meta_data->>'origem' o, raw_user_meta_data ? 'autorizacao' t from auth.users where id=$1",[NG])).rows[0];
+ok(criada.o==="gestora" && criada.t===false, "com autorização válida a conta nasce; o banco grava a origem e descarta o código");
+await erra(()=>inserir(UN,"nova@adm.com","nonce-ng"), "autorização é de uso único");
+await autorizar("exp@x.com","convite","nonce-exp");
+await pg.exec("update autorizacao_cadastro set expira_em = now() - interval '1 minute' where nonce_hash = '"+hashN("nonce-exp")+"'");
+await erra(()=>inserir(UN,"exp@x.com","nonce-exp"), "autorização expirada (2 min) é recusada");
+await autorizar("plataforma@x.com","plataforma","nonce-ua");
+await inserir(UA,"plataforma@x.com","nonce-ua");
+ok((await pg.query("select count(*)::int n from auth.users where id in ($1,$2)",[NG,UA])).rows[0].n===2, "contas criadas pelo servidor (com autorização) existem");
+await como(U1);
+await erra(()=>pg.query("select autorizar_cadastro('x@x.com','gestora',$1)",[hashN("a")]), "usuário comum não registra autorização");
+ok((await pg.query("select count(*)::int n from autorizacao_cadastro")).rows[0].n===0, "RLS: ninguém lê as autorizações pela API");
+await pg.exec("reset role; set role anon");
+await erra(()=>pg.query("select autorizar_cadastro('x@x.com','gestora',$1)",[hashN("a")]), "anônimo também não");
+await pg.exec("reset role");
+await erra(()=>{ return pg.exec("reset role; set role service_role").then(()=>pg.query("select autorizar_cadastro('x@x.com','invalida',$1)",[hashN("a")])); }, "origem desconhecida é recusada");
+await pg.exec("reset role");
 await pg.query("insert into administrador_plataforma(usuario_id) values ($1)",[UA]);
 
 // permissão para criar organização

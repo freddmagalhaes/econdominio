@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { RE_TOKEN, hashToken } from "@/lib/convite";
 import { erroContaJaExiste, validarSenha } from "@/lib/senha";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { criarContaAutorizada } from "@/lib/supabase/criar-conta";
 import { createClient } from "@/lib/supabase/server";
 
 export type EstadoConvite = { erro?: string; jaTemConta?: boolean };
@@ -32,7 +33,7 @@ export async function aceitarConvite(_: EstadoConvite, formData: FormData): Prom
 /**
  * Sem conta: o link do convite (que só chegou ao e-mail convidado) cria a conta com o e-mail do convite
  * e já o aceita. O e-mail é lido do convite no servidor, nunca do formulário, e o banco só aceita
- * contas criadas pelo servidor (origem "convite").
+ * contas criadas pelo servidor com autorização de uso único.
  */
 export async function criarContaPeloConvite(_: EstadoConvite, formData: FormData): Promise<EstadoConvite> {
   const token = String(formData.get("token") ?? "");
@@ -48,15 +49,10 @@ export async function criarContaPeloConvite(_: EstadoConvite, formData: FormData
   const email = (convite as { email?: string } | null)?.email;
   if (!email) return { erro: MENSAGENS.convite_invalido };
 
-  // email_confirm: o link do convite só existe na caixa de entrada do convidado, então abri-lo comprova o e-mail.
-  const { error: erroCriar } = await admin.auth.admin.createUser({
-    email,
-    password: senha,
-    email_confirm: true,
-    app_metadata: { origem: "convite" },
-  });
-  if (erroCriar) {
-    return erroContaJaExiste(erroCriar.message)
+  // O e-mail fica confirmado: o link do convite só existe na caixa de entrada do convidado.
+  const criada = await criarContaAutorizada(admin, { email, senha, origem: "convite" });
+  if ("erro" in criada) {
+    return erroContaJaExiste(criada.erro)
       ? { erro: "Já existe uma conta com o e-mail deste convite. Entre para aceitar.", jaTemConta: true }
       : { erro: "Não foi possível criar a conta. Tente novamente." };
   }
