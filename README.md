@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# eCondomínio
 
-## Getting Started
+Gestão de condomínios para administradoras (com garantidora) e, depois, síndicos de condomínios pequenos.
 
-First, run the development server:
+Stack: Next.js (App Router) + TypeScript + Tailwind, Supabase (Postgres, Auth, RLS), deploy na Vercel.
+Documentação de produto e arquitetura em [`docs/`](docs/).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Rodando localmente
+1. `npm install`
+2. Crie um projeto no [Supabase](https://supabase.com) (região São Paulo).
+3. Copie `.env.example` para `.env.local` e preencha URL e chave publishable.
+4. Aplique as migrations em ordem (`supabase/migrations/0001`, `0002`, `0003`) no SQL Editor do Supabase, ou com a CLI: `supabase link` e `supabase db push`.
+5. `npm run dev` e abra http://localhost:3000
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Estrutura
+- `supabase/migrations/` schema SQL com RLS (organização → condomínio)
+- `src/proxy.ts` e `src/lib/supabase/` sessão e clientes Supabase
+- `src/app/login` autenticação · `src/app/dashboard` organizações e condomínios · `src/app/portal` portal do morador · `src/app/convite` aceite de convite
+- `src/lib/comunicacao/` e-mail (Resend), modelos e fila de envio · `docs/06-portal-comunicacao.md`
+- `src/lib/dinheiro.ts` utilitários de centavos
+- `public/modelo-importacao*` modelos de importação (xlsx e csv) e `docs/05-guia-importacao.md` guia para clientes
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Regras do projeto
+- Dinheiro sempre em centavos (inteiros).
+- `lancamento` e `pagamento` são imutáveis: correção por estorno.
+- Toda tabela de negócio tem `condominio_id` e RLS.
+- `SUPABASE_SERVICE_ROLE_KEY` nunca vai para o navegador.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Testes
+`npm run test:unit` testa o leitor de planilhas (CSV e XLSX).
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`npm run test:sql` roda as migrations em um Postgres em memória (PGlite) e verifica RLS, importação, cotas, pagamentos, estorno e imutabilidade.

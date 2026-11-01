@@ -1,26 +1,103 @@
 @import "tailwindcss";
 
+/* O tema escuro é controlado pela classe `.dark` no <html> (script no layout raiz + botão de alternar). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: oklch(0.98 0.004 255);
+  --foreground: oklch(0.21 0.025 265);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.96 0.006 255);
+  --muted-foreground: oklch(0.5 0.02 262);
+  --border: oklch(0.915 0.008 257);
+  --primary: oklch(0.5 0.2 272);
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: oklch(0.6 0.18 272);
+  --danger: oklch(0.53 0.2 25);
+  --danger-soft: oklch(0.97 0.025 25);
+  --success: oklch(0.5 0.13 155);
+  --success-soft: oklch(0.97 0.03 155);
+  --warning: oklch(0.55 0.13 70);
+  --warning-soft: oklch(0.97 0.04 85);
+  color-scheme: light;
+}
+
+.dark {
+  --background: oklch(0.17 0.016 265);
+  --foreground: oklch(0.95 0.005 250);
+  --card: oklch(0.215 0.02 265);
+  --muted: oklch(0.255 0.022 265);
+  --muted-foreground: oklch(0.72 0.02 260);
+  --border: oklch(1 0 0 / 11%);
+  --primary: oklch(0.7 0.16 272);
+  --primary-foreground: oklch(0.16 0.02 265);
+  --ring: oklch(0.7 0.16 272);
+  --danger: oklch(0.72 0.18 25);
+  --danger-soft: oklch(0.29 0.07 25);
+  --success: oklch(0.77 0.15 155);
+  --success-soft: oklch(0.28 0.05 155);
+  --warning: oklch(0.82 0.13 80);
+  --warning-soft: oklch(0.3 0.05 80);
+  color-scheme: dark;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Relatórios: impressão / PDF sempre em tema claro, sem menu e com o cabeçalho da marca. */
+.somente-impressao {
+  display: none;
+}
+
+@media print {
+  :root,
+  .dark {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.2 0.02 265);
+    --card: oklch(1 0 0);
+    --muted: oklch(0.96 0.005 255);
+    --muted-foreground: oklch(0.42 0.02 262);
+    --border: oklch(0.85 0.01 257);
+    --primary: oklch(0.5 0.2 272);
+    --primary-foreground: oklch(1 0 0);
+    --danger: oklch(0.5 0.2 25);
+    --success: oklch(0.45 0.13 155);
+    --warning: oklch(0.5 0.13 70);
+    color-scheme: light;
+  }
+
+  .nao-imprimir {
+    display: none !important;
+  }
+
+  .somente-impressao {
+    display: block;
+  }
+
+  .area-conteudo {
+    padding: 0 !important;
+  }
 }
