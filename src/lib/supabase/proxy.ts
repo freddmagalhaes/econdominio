@@ -2,6 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const ROTAS_PUBLICAS = ["/login"];
+// Links de convite: abertos a quem não tem conta (cria a conta) e a quem já está logado (aceita o convite).
+const ROTAS_ABERTAS = ["/convite", "/cadastro"];
 // Rotas chamadas por serviços externos (cron), autenticadas por segredo próprio.
 const ROTAS_SEM_SESSAO = ["/api/comunicacao"];
 
@@ -38,6 +40,7 @@ export async function atualizarSessao(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const publica = ROTAS_PUBLICAS.some((rota) => pathname.startsWith(rota));
+  if (ROTAS_ABERTAS.some((rota) => pathname.startsWith(rota))) return response;
 
   if (!user && !publica) {
     const url = request.nextUrl.clone();

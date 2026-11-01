@@ -58,11 +58,13 @@ export function MenuLateral({
   condominios,
   temGestao,
   temPortal,
+  ehAdminPlataforma,
   email,
 }: {
   condominios: Condominio[];
   temGestao: boolean;
   temPortal: boolean;
+  ehAdminPlataforma: boolean;
   email: string | null;
 }) {
   const pathname = usePathname();
@@ -78,6 +80,11 @@ export function MenuLateral({
       {temGestao && (
         <Item href="/relatorios" icone="grafico" ativo={pathname.startsWith("/relatorios")} aoClicar={fechar}>
           Relatório consolidado
+        </Item>
+      )}
+      {ehAdminPlataforma && (
+        <Item href="/plataforma" icone="chave" ativo={pathname.startsWith("/plataforma")} aoClicar={fechar}>
+          Plataforma
         </Item>
       )}
       {temPortal && (

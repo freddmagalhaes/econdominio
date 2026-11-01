@@ -83,3 +83,19 @@ Antes do primeiro `vercel deploy`, saiba que:
 4. No Supabase (Authentication → URL Configuration), ajuste **Site URL** e **Redirect URLs** para o endereço publicado, para os e-mails de confirmação de conta apontarem para o lugar certo.
 5. Configure o Resend (`RESEND_API_KEY`, `EMAIL_REMETENTE`) para o e-mail sair. Sem isso, o cron e o botão "Reenviar" **não tentam nada** e as mensagens ficam pendentes, sem gastar as 5 tentativas.
 6. Decida o que fazer com o **cadastro aberto** (por exemplo, exigir confirmação de e-mail e/ou captcha no Supabase, ou só aceitar contas por convite).
+
+## Cadastro somente por convite
+Não existe cadastro público: a tela de entrada não tem "Criar conta" e o próprio banco recusa contas criadas fora do app.
+
+- **Trava no banco:** um gatilho em `auth.users` só aceita a conta se `app_metadata.origem` for `convite`, `gestora` ou `plataforma`. Esse campo só pode ser definido pelo servidor do app (chave secreta); o `signUp` público da API do Supabase não consegue. Criar usuário pelo painel do Supabase ("Add user") também é recusado.
+- **Morador:** o gestor envia o convite ao e-mail dele. O link (`/convite/<token>`) mostra o e-mail do convite (não editável) e pede só a senha; ao enviar, o servidor valida o token, cria a conta com aquele e-mail **já confirmado** (abrir o link prova que a caixa de entrada é dele) e aceita o convite. Quem já tem conta entra e aceita.
+- **Administradora:** só o **administrador da plataforma** convida, na tela **Plataforma** do menu. O link (`/cadastro/<token>`) cria a conta e libera a criação de organizações (`conta_gestora`). Sem essa permissão, `criar_organizacao` é recusada.
+- **Tokens:** valem 7 dias, uso único, e só o hash fica no banco.
+
+**Primeiro administrador da plataforma** (uma vez, no SQL Editor do Supabase, com o seu e-mail):
+```sql
+insert into administrador_plataforma (usuario_id) select id from auth.users where lower(email) = lower('SEU-EMAIL');
+insert into conta_gestora (usuario_id) select id from auth.users where lower(email) = lower('SEU-EMAIL') on conflict do nothing;
+```
+
+**Observação:** com o Resend sem configuração, o e-mail do convite não sai; a tela mostra o link para você repassar manualmente.

@@ -22,6 +22,9 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
         <Suspense fallback={null}>
           <Formulario searchParams={searchParams} />
         </Suspense>
+        <p className="text-center text-xs text-muted-foreground">
+          O acesso é somente por convite. Se você recebeu um convite, use o link enviado ao seu e-mail.
+        </p>
       </div>
     </main>
   );

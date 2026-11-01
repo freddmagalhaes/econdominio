@@ -19,10 +19,11 @@ export default function DashboardPage() {
 async function Conteudo() {
   const supabase = await createClient();
 
-  const [{ data: organizacoes }, { data: condominios }, { data: unidades }] = await Promise.all([
+  const [{ data: organizacoes }, { data: condominios }, { data: unidades }, { data: podeCriar }] = await Promise.all([
     supabase.from("organizacao").select("id, nome").order("nome"),
     supabase.from("condominio").select("id, nome, organizacao_id").order("nome"),
     supabase.rpc("portal_minhas_unidades"),
+    supabase.rpc("pode_criar_organizacao"),
   ]);
 
   // Morador (sem organização): vai direto para o portal.
@@ -36,7 +37,15 @@ async function Conteudo() {
         <p className="text-sm text-muted-foreground">Seus condomínios e atalhos.</p>
       </header>
 
-      {!organizacoes?.length ? (
+      {!organizacoes?.length && podeCriar !== true ? (
+        <section className="flex max-w-xl flex-col gap-2 rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-medium">Sua conta ainda não está vinculada a uma administradora</h2>
+          <p className="text-sm text-muted-foreground">
+            O acesso ao ECONDOMINIO é por convite. Se você é morador, abra o link do convite enviado ao seu e-mail. Se é
+            administradora, peça um convite à plataforma.
+          </p>
+        </section>
+      ) : !organizacoes?.length ? (
         <section className="flex max-w-xl flex-col gap-3 rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-medium">Crie sua organização</h2>
           <p className="text-sm text-muted-foreground">

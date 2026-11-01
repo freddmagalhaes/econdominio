@@ -42,9 +42,9 @@ export function emailConvite(d: {
     "Você foi convidado para o portal do condomínio",
     `<p>Você pode acompanhar as cotas, o balancete e os comunicados do <strong>${escaparHtml(d.condominio)}</strong> (${escaparHtml(local)}).</p>
 <p><a href="${escaparHtml(d.link)}" style="display:inline-block;background:#18181b;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Aceitar convite</a></p>
-<p style="font-size:13px;color:#52525b">Use este mesmo e-mail para entrar ou criar sua conta. O link vale por 7 dias e só pode ser usado uma vez.</p>`,
+<p style="font-size:13px;color:#52525b">O link abre a criação da sua conta (você define a senha) e confirma que este e-mail é seu. Ele vale por 7 dias e só pode ser usado uma vez.</p>`,
   );
-  const texto = `Você foi convidado para o portal do ${d.condominio} (${local}).\n\nAceite o convite: ${d.link}\n\nUse este mesmo e-mail para entrar ou criar sua conta. O link vale por 7 dias.`;
+  const texto = `Você foi convidado para o portal do ${d.condominio} (${local}).\n\nAceite o convite: ${d.link}\n\nO link abre a criação da sua conta (você define a senha) e confirma que este e-mail é seu. Vale por 7 dias.`;
   return { assunto, html, texto };
 }
 
@@ -96,4 +96,15 @@ export function textoWhatsappComunicado(d: {
     "_Para deixar de receber estes avisos, ajuste sua autorização no portal ou fale com a administração._",
   );
   return linhas.join("\n").slice(0, 3900);
+}
+
+export function emailConviteGestora(d: { link: string }): Mensagem {
+  const html = moldura(
+    "Você foi convidado para o ECONDOMINIO",
+    `<p>Você recebeu acesso para gerenciar condomínios no <strong>ECONDOMINIO</strong>.</p>
+<p><a href="${escaparHtml(d.link)}" style="display:inline-block;background:#18181b;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Criar minha conta</a></p>
+<p style="font-size:13px;color:#52525b">O link abre a criação da sua conta (você define a senha) e confirma que este e-mail é seu. Ele vale por 7 dias e só pode ser usado uma vez.</p>`,
+  );
+  const texto = `Você foi convidado para gerenciar condomínios no ECONDOMINIO.\n\nCrie sua conta: ${d.link}\n\nO link confirma que este e-mail é seu e vale por 7 dias.`;
+  return { assunto: "Convite para o ECONDOMINIO", html, texto };
 }

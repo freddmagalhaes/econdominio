@@ -8,14 +8,16 @@ const U1 = "11111111-1111-1111-1111-111111111111", U2 = "22222222-2222-2222-2222
 const U3 = "33333333-3333-3333-3333-333333333333", U4 = "44444444-4444-4444-4444-444444444444";
 await pg.exec(`
  create schema auth;
- create table auth.users(id uuid primary key, email text);
+ create table auth.users(id uuid primary key, email text, raw_app_meta_data jsonb not null default '{}'::jsonb);
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
- create role authenticated nologin; create role anon nologin;
+ create role authenticated nologin; create role anon nologin; create role service_role nologin;
  grant usage on schema auth to authenticated;
  insert into auth.users values ('${U1}','u1@x.com'),('${U2}','u2@x.com'),('${U3}','morador@x.com'),('${U4}','outro@x.com');
 `);
 for (const f of readdirSync(M).filter((x) => x.endsWith(".sql")).sort()) { await pg.exec(readFileSync(M+f,"utf8")); console.log("OK migration", f); }
-await pg.exec(`grant usage on schema public to authenticated; grant all on all tables in schema public to authenticated; grant usage on all sequences in schema public to authenticated;`);
+await pg.exec(`grant usage on schema public to authenticated, service_role; grant all on all tables in schema public to authenticated, service_role; grant usage on all sequences in schema public to authenticated, service_role;`);
+// Administradoras de teste: podem criar organização (0015). U3/U4 são moradores e não têm essa permissão.
+await pg.exec(`insert into conta_gestora (usuario_id) values ('${U1}'), ('${U2}')`);
 
 const como = async (u) => { await pg.exec(`reset role; select set_config('request.jwt.claim.sub','${u}',false); set role authenticated;`); };
 let falhas = 0;
@@ -429,6 +431,73 @@ await erra(()=>pg.query("select editar_cota($1,45000,null)",[cotaG]), "cota ante
 await como(U2);
 await erra(()=>pg.query("select editar_cota($1,45000,null)",[cotaG]), "RLS: outra administradora não edita cotas");
 await erra(()=>pg.query("select gerar_cotas($1,'2027-11-01','2027-11-10',null)",[c5]), "RLS: outra administradora não gera cotas");
+
+
+// ---------------------------------------------------------------- cadastro somente por convite (0015)
+await pg.exec("reset role");
+const NG = "66666666-6666-6666-6666-666666666666", UA = "77777777-7777-7777-7777-777777777777", UN = "88888888-8888-8888-8888-888888888888";
+await erra(()=>pg.query("insert into auth.users(id,email) values ($1,'invasor@x.com')",[UN]), "cadastro público (sem origem) é recusado pelo banco");
+await erra(()=>pg.query(`insert into auth.users(id,email,raw_app_meta_data) values ($1,'invasor@x.com','{"origem":"qualquer"}')`,[UN]), "origem desconhecida também é recusada");
+await pg.query(`insert into auth.users(id,email,raw_app_meta_data) values ($1,'nova@adm.com','{"origem":"gestora"}'), ($2,'plataforma@x.com','{"origem":"plataforma"}')`,[NG,UA]);
+ok((await pg.query("select count(*)::int n from auth.users where id in ($1,$2)",[NG,UA])).rows[0].n===2, "contas criadas pelo servidor (origem válida) são aceitas");
+await pg.query("insert into administrador_plataforma(usuario_id) values ($1)",[UA]);
+
+// permissão para criar organização
+await como(U3);
+await erra(()=>pg.query("select criar_organizacao('Org do morador')"), "morador (sem conta gestora) não cria organização");
+ok((await pg.query("select pode_criar_organizacao() p")).rows[0].p===false, "pode_criar_organizacao() é falso para morador");
+await como(NG);
+await erra(()=>pg.query("select criar_organizacao('Org sem convite aceito')"), "conta ainda sem permissão não cria organização");
+
+// convite de administradora: só o administrador da plataforma
+await como(U1);
+await erra(()=>pg.query("select criar_convite_gestora('x@y.com','h')"), "administradora comum não convida outras contas");
+ok((await pg.query("select eh_admin_plataforma() e")).rows[0].e===false, "eh_admin_plataforma() é falso para quem não é");
+await como(UA);
+ok((await pg.query("select eh_admin_plataforma() e")).rows[0].e===true, "administrador da plataforma é reconhecido");
+const cg = (await pg.query("select criar_convite_gestora('  Nova@Adm.com ','hash-gestora') r")).rows[0].r;
+ok(cg.email==="nova@adm.com", "convite de administradora com e-mail normalizado");
+await erra(()=>pg.query("select criar_convite_gestora('sem-arroba','h2')"), "e-mail inválido é rejeitado");
+await erra(()=>pg.query("select criar_convite_gestora('u1@x.com','h3')"), "quem já é administradora não recebe novo convite");
+ok((await pg.query("select count(*)::int n from convite_gestora")).rows[0].n===1, "administrador vê os convites enviados");
+await como(U1);
+ok((await pg.query("select count(*)::int n from convite_gestora")).rows[0].n===0, "RLS: outras contas não enxergam os convites de administradora");
+
+// funções exclusivas do servidor (service_role)
+await erra(()=>pg.query("select convite_gestora_para_cadastro('hash-gestora')"), "usuário logado não chama a validação do servidor");
+await pg.exec("reset role; set role anon");
+await erra(()=>pg.query("select convite_gestora_para_cadastro('hash-gestora')"), "anônimo também não");
+await pg.exec("reset role; set role service_role");
+ok((await pg.query("select convite_gestora_para_cadastro('hash-gestora') r")).rows[0].r.email==="nova@adm.com", "servidor valida o token e recebe o e-mail convidado");
+ok((await pg.query("select convite_gestora_para_cadastro('token-inexistente') r")).rows[0].r===null, "token inexistente não devolve nada");
+await erra(()=>pg.query("select concluir_cadastro_gestora('hash-gestora',$1)",[UA]), "concluir exige que a conta tenha o e-mail do convite");
+await pg.query("select concluir_cadastro_gestora('hash-gestora',$1)",[NG]);
+await erra(()=>pg.query("select concluir_cadastro_gestora('hash-gestora',$1)",[NG]), "convite de administradora não pode ser reutilizado");
+ok((await pg.query("select convite_gestora_para_cadastro('hash-gestora') r")).rows[0].r===null, "convite usado deixa de ser válido");
+await como(NG);
+const orgNG = (await pg.query("select criar_organizacao('Administradora Nova') id")).rows[0].id;
+ok(!!orgNG && (await pg.query("select pode_criar_organizacao() p")).rows[0].p===true, "após concluir o cadastro a administradora cria a organização");
+
+// convite expirado e revogado
+await como(UA);
+await pg.query("select criar_convite_gestora('outra@adm.com','hash-exp')");
+await pg.query("select criar_convite_gestora('revogar@adm.com','hash-rev')");
+const idRev = (await pg.query("select id from convite_gestora where token_hash='hash-rev'")).rows[0].id;
+await pg.query("select revogar_convite_gestora($1)",[idRev]);
+await pg.exec("reset role");
+await pg.exec("update convite_gestora set expira_em = now() - interval '1 day' where token_hash='hash-exp'");
+await pg.exec("set role service_role");
+ok((await pg.query("select convite_gestora_para_cadastro('hash-exp') r")).rows[0].r===null && (await pg.query("select convite_gestora_para_cadastro('hash-rev') r")).rows[0].r===null, "convite expirado e convite revogado não valem");
+
+// convite de morador: validação feita pelo servidor antes de criar a conta
+await pg.exec("reset role");
+await como(U1);
+await pg.query("select criar_convite($1,$2,'hash-cadastro-morador')",[un["2"],pe["João"]]);
+await pg.exec("reset role; set role service_role");
+const cm = (await pg.query("select convite_para_cadastro('hash-cadastro-morador') r")).rows[0].r;
+ok(cm.email==="joao@x.com" && cm.condominio==="Cond D" && cm.unidade==="2", "servidor lê e-mail, condomínio e unidade do convite de morador: "+JSON.stringify(cm));
+ok((await pg.query("select convite_para_cadastro('hash-inexistente') r")).rows[0].r===null, "token de morador inexistente não devolve nada");
+await pg.exec("reset role");
 
 if (falhas) process.exitCode = 1;
 console.log(falhas ? `\n${falhas} FALHA(S)` : "\nTODOS OS TESTES PASSARAM");

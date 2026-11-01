@@ -21,10 +21,11 @@ function Esqueleto() {
 
 async function ComDados({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const [{ data: auth }, { data: condominios }, { data: unidades }] = await Promise.all([
+  const [{ data: auth }, { data: condominios }, { data: unidades }, { data: admin }] = await Promise.all([
     supabase.auth.getUser(),
     supabase.from("condominio").select("id, nome").order("nome"),
     supabase.rpc("portal_minhas_unidades"),
+    supabase.rpc("eh_admin_plataforma"),
   ]);
 
   const lista = condominios ?? [];
@@ -36,6 +37,7 @@ async function ComDados({ children }: { children: React.ReactNode }) {
         condominios={lista}
         temGestao={lista.length > 0}
         temPortal={temPortal}
+        ehAdminPlataforma={admin === true}
         email={auth.user?.email ?? null}
       />
       <main className="area-conteudo min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>

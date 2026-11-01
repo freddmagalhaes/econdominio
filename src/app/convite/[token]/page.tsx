@@ -1,10 +1,13 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Logo } from "@/app/_componentes/logo";
+import { NovaConta } from "@/app/_componentes/nova-conta";
 import { RE_TOKEN, hashToken } from "@/lib/convite";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { sair } from "../../login/actions";
 import { BotaoAceitar } from "./botao-aceitar";
+import { criarContaPeloConvite } from "./actions";
 
 export const metadata = { title: "Convite" };
 
@@ -23,25 +26,54 @@ export default function ConvitePage({ params }: Props) {
   );
 }
 
+function Indisponivel() {
+  return (
+    <>
+      <h1 className="text-2xl font-semibold">Convite indisponível</h1>
+      <p className="text-muted-foreground">
+        Este convite é inválido, expirou ou já foi utilizado. Peça um novo convite ao síndico ou à administradora.
+      </p>
+    </>
+  );
+}
+
+type Info = { email: string; condominio: string; unidade: string; bloco: string | null };
+
 async function Conteudo({ params }: { params: Props["params"] }) {
   const { token } = await params;
   if (!RE_TOKEN.test(token)) notFound();
+  const hash = hashToken(token);
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("ver_convite", { p_token_hash: hashToken(token) });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (error || !data) {
+  // Sem conta: o convite cria a conta (e confirma o e-mail, pois o link só chegou à caixa do convidado).
+  if (!user) {
+    const { data } = await createAdminClient().rpc("convite_para_cadastro", { p_token_hash: hash });
+    const info = data as Info | null;
+    if (!info) return <Indisponivel />;
     return (
       <>
-        <h1 className="text-2xl font-semibold">Convite indisponível</h1>
+        <h1 className="text-2xl font-semibold">Convite para o portal</h1>
         <p className="text-muted-foreground">
-          Este convite é inválido, expirou ou já foi utilizado. Peça um novo convite ao síndico ou à
-          administradora.
+          Você foi convidado para acompanhar o <strong>{info.condominio}</strong> (
+          {info.bloco ? `bloco ${info.bloco}, ` : ""}unidade {info.unidade}). Crie sua senha para ativar a conta.
         </p>
+        <NovaConta
+          token={token}
+          email={info.email}
+          acao={criarContaPeloConvite}
+          rotuloBotao="Criar conta e aceitar convite"
+          caminhoConvite="/convite"
+        />
       </>
     );
   }
 
+  const { data, error } = await supabase.rpc("ver_convite", { p_token_hash: hash });
+  if (error || !data) return <Indisponivel />;
   const convite = data as { condominio: string; unidade: string; bloco: string | null; email_confere: boolean };
 
   return (
@@ -56,8 +88,7 @@ async function Conteudo({ params }: { params: Props["params"] }) {
       ) : (
         <>
           <p className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm text-warning">
-            Este convite foi enviado para outro e-mail. Saia e entre (ou crie a conta) com o e-mail que
-            recebeu o convite.
+            Este convite foi enviado para outro e-mail. Saia e entre com o e-mail que recebeu o convite.
           </p>
           <form action={sair}>
             <button className="text-sm underline">Sair e trocar de conta</button>
