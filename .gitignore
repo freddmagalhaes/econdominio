@@ -1,6 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# Dependências
 /node_modules
 /.pnp
 .pnp.*
@@ -10,37 +8,39 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# Build e testes
 /.next/
 /out/
-
-# production
 /build
+/coverage
+*.tsbuildinfo
+next-env.d.ts
 
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
+# SEGREDOS: nunca versionar. O modelo sem valores (.env.example) é a única exceção, e a exceção
+# precisa vir DEPOIS da regra geral.
+.env
+.env.*
 !.env.example
+*.pem
+*.key
+*.p12
 
+# Vercel e Supabase CLI (vínculo local e arquivos temporários)
 .vercel
-.env*
+/.supabase
+/supabase/.temp
+/supabase/.branches
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
